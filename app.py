@@ -36,21 +36,11 @@ def to_excel(df):
         logger.error(f"Error converting to Excel: {e}")
         return None
 
-def validate_data(data):
-    """Validate input data."""
-    if data is None or len(data) == 0:
-        raise ValueError("Data is empty")
-    if 'Price' not in data.columns or 'Quantity' not in data.columns:
-        raise ValueError("Data must contain 'Price' and 'Quantity' columns")
-    return True
-
 def calculate_elasticity(data):
     """Calculate price elasticity using Log-Log Regression."""
-    validate_data(data)
     clean_data = data[(data['Price'] > 0) & (data['Quantity'] > 0)].copy()
-    
     if len(clean_data) < 2:
-        raise ValueError(f"Need at least 2 valid data points, got {len(clean_data)}")
+        raise ValueError("Need at least 2 valid data points.")
     
     X = np.log(clean_data['Price'])
     y = np.log(clean_data['Quantity'])
@@ -76,17 +66,21 @@ if excel_data:
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
-# --- Data Selection Logic ---
+# --- Data Loading Logic ---
 if uploaded_file is not None:
     try:
         df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        st.success(f"✅ Data loaded! Rows: {len(df)}")
+        st.success(f"✅ Data loaded successfully! Rows: {len(df)}")
     except Exception as e:
-        st.error(f"❌ Error loading file: {e}")
+        st.error(f"❌ Error: {e}")
         df = get_sample_data()
 else:
-    st.info("👋 Use the sidebar to upload data or explore with our sample set.")
+    st.info("👋 Using sample data. Upload your own in the sidebar to begin.")
     df = get_sample_data()
+
+# --- Data Preview (The Section You Wanted Back) ---
+with st.expander("👀 Preview Raw Data", expanded=False):
+    st.dataframe(df, use_container_width=True)
 
 # --- Main Analysis ---
 if df is not None:
@@ -101,7 +95,7 @@ if df is not None:
         status = "📈 Elastic" if abs(beta) > 1 else "📉 Inelastic"
         m3.metric("Market Type", status)
 
-        # 2. Strategic Recommendations (Your Revised 2-Point Section)
+        # 2. Strategic Recommendations (The 2-Point Section)
         st.subheader("📋 Strategic Recommendations")
         
         if beta > -1.0:
@@ -129,7 +123,6 @@ if df is not None:
             current_price = st.number_input("Current Avg Price ($)", value=float(df['Price'].mean()), step=1.0)
             unit_cost = st.number_input("Unit Cost ($)", value=float(df['Price'].min() * 0.5), step=0.5)
             
-            # Profit-Maximizing Price Logic
             if beta < -1:
                 optimal_p = (unit_cost * beta) / (1 + beta)
                 if optimal_p > 0:
@@ -157,11 +150,21 @@ if df is not None:
             fig.update_layout(title="Revenue vs Profit Optimization", xaxis_title="Price ($)", height=450)
             st.plotly_chart(fig, use_container_width=True)
 
-        # 4. Detailed Charts
-        with st.expander("📊 View Demand Curve & Raw Data"):
-            fig_scatter = px.scatter(df, x="Price", y="Quantity", trendline="ols")
+        # 4. Technical Regression Output (The Section You Wanted Back)
+        st.divider()
+        st.subheader("🔬 Model Validation")
+        col_chart, col_stats = st.columns([3, 2])
+        
+        with col_chart:
+            fig_scatter = px.scatter(df, x="Price", y="Quantity", trendline="ols", 
+                                     title="Historical Demand Relationship (Log-Log Fit)")
             st.plotly_chart(fig_scatter, use_container_width=True)
-            st.dataframe(df, use_container_width=True)
+            
+        with col_stats:
+            st.write("**Regression Statistics (OLS Output)**")
+            st.text(model.summary().tables[1]) # Display the coefficients table directly
+            with st.expander("View Full OLS Summary"):
+                st.write(model.summary())
 
     except Exception as e:
         st.error(f"Error in analysis: {e}")
