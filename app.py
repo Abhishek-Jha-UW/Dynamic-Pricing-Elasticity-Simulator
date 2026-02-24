@@ -1,42 +1,51 @@
-# Improved app.py Code
+# Complete Improved Code for Dynamic Pricing & Elasticity Simulator
 
-import logging
-from flask import Flask, request, jsonify
+import pandas as pd
+import numpy as np
+import json
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+class DynamicPricingSimulator:
+    def __init__(self, initial_price, demand_data):
+        self.initial_price = initial_price
+        self.demand_data = demand_data
+        self.price_history = []
+        self.demand_history = []
+        self.validations = self.validate_data()
 
-app = Flask(__name__)
+    def validate_data(self):
+        if not isinstance(self.initial_price, (int, float)) or self.initial_price <= 0:
+            raise ValueError("Initial price must be a positive number")
+        if not isinstance(self.demand_data, pd.DataFrame):
+            raise ValueError("Demand data must be a pandas DataFrame")
+        return True
 
+    def simulate_demand(self, price):
+        return max(0, int(self.demand_data['base_demand'].mean() - price * self.demand_data['price_sensitivity'].mean()))
 
-@app.route('/calculate', methods=['POST'])
-def calculate():
-    try:
-        data = request.json
-        logging.info('Received data: %s', data)
+    def perform_pricing_strategy(self):
+        current_price = self.initial_price
+        for _ in range(10):  # Simulating for 10 price changes
+            current_demand = self.simulate_demand(current_price)
+            self.price_history.append(current_price)
+            self.demand_history.append(current_demand)
+            current_price *= 0.95  # Decrease price by 5%
 
-        # Validate input
-        if not data or 'price' not in data or 'quantity' not in data:
-            logging.error('Invalid input data.')
-            return jsonify({'error': 'Invalid input, please provide price and quantity.'}), 400
+    def report(self):
+        report_data = {
+            'date': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            'price_history': self.price_history,
+            'demand_history': self.demand_history
+        }
+        return json.dumps(report_data, indent=4)
 
-        price = data['price']
-        quantity = data['quantity']
-
-        # Perform calculations
-        if price < 0 or quantity < 0:
-            logging.error('Negative price or quantity found. Price: %s, Quantity: %s', price, quantity)
-            return jsonify({'error': 'Price and quantity must be non-negative.'}), 400
-
-        total_revenue = price * quantity
-        logging.info('Calculated total revenue: %s', total_revenue)
-
-        return jsonify({'total_revenue': total_revenue}), 200
-
-    except Exception as e:
-        logging.exception('An error occurred while calculating revenue: %s', e)
-        return jsonify({'error': 'An error occurred while processing your request.'}), 500
-
-
+# Example usage:
 if __name__ == '__main__':
-    app.run(debug=True)
+    initial_price = 100.0
+    demand_data = pd.DataFrame({
+        'base_demand': [100, 150, 200],
+        'price_sensitivity': [1.2, 1.5, 1.8]
+    })
+    simulator = DynamicPricingSimulator(initial_price, demand_data)
+    simulator.perform_pricing_strategy()
+    print(simulator.report())
