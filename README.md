@@ -30,9 +30,3 @@ $$\ln(Q) = \beta_0 + \beta_1 \ln(P) + \epsilon$$
 *   **Dynamic Visualizations:** Demand and revenue curves generated using **Plotly**.
 
 ---
-
-### 4. Project Structure
-*   `app.py`: Streamlit application interface.
-*   `model.py`: Backend regression and optimization logic.
-*   `requirements.txt`: Project dependencies.
-*   `data/`: Directory for historical datasets.
