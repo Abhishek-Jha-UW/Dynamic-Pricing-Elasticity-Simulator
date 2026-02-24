@@ -1,31 +1,42 @@
-# Improved app.py
+# Improved app.py Code
 
-import sys
+import logging
+from flask import Flask, request, jsonify
 
-class CustomError(Exception):
-    pass
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-
-def validate_input(data):
-    if not data:
-        raise CustomError("Input data cannot be empty")
-    # Add further validation logic as necessary
+app = Flask(__name__)
 
 
-def process_data(data):
+@app.route('/calculate', methods=['POST'])
+def calculate():
     try:
-        validate_input(data)
-        # Further processing logic
-        return f"Processed data: {data}"
-    except CustomError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        data = request.json
+        logging.info('Received data: %s', data)
 
+        # Validate input
+        if not data or 'price' not in data or 'quantity' not in data:
+            logging.error('Invalid input data.')
+            return jsonify({'error': 'Invalid input, please provide price and quantity.'}), 400
 
-def main():
-    data = input("Enter data: ")
-    result = process_data(data)
-    print(result)
+        price = data['price']
+        quantity = data['quantity']
+
+        # Perform calculations
+        if price < 0 or quantity < 0:
+            logging.error('Negative price or quantity found. Price: %s, Quantity: %s', price, quantity)
+            return jsonify({'error': 'Price and quantity must be non-negative.'}), 400
+
+        total_revenue = price * quantity
+        logging.info('Calculated total revenue: %s', total_revenue)
+
+        return jsonify({'total_revenue': total_revenue}), 200
+
+    except Exception as e:
+        logging.exception('An error occurred while calculating revenue: %s', e)
+        return jsonify({'error': 'An error occurred while processing your request.'}), 500
+
 
 if __name__ == '__main__':
-    main()
+    app.run(debug=True)
