@@ -7,279 +7,221 @@ import plotly.graph_objects as go
 from io import BytesIO
 import logging
 
-# Configure logging
+# -----------------------------
+# Logging
+# -----------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Page Config ---
+# -----------------------------
+# Page Config
+# -----------------------------
 st.set_page_config(page_title="Price Elasticity Simulator", layout="wide")
 st.title("📈 Dynamic Pricing & Elasticity Simulator")
-st.markdown("Optimize your revenue and profit using Log-Log Regression models.")
+st.markdown("Optimize revenue and profit using a **Log-Log Elasticity Model**.")
 
-# --- Helper Functions ---
+# -----------------------------
+# Helper Functions
+# -----------------------------
 @st.cache_data
 def get_sample_data():
-    """Generate sample data for demonstration."""
     return pd.DataFrame({
         'Price': [10, 12, 15, 18, 20, 22, 25, 30, 35, 40],
         'Quantity': [500, 450, 380, 310, 290, 240, 200, 150, 100, 80]
     })
 
 def to_excel(df):
-    """Convert DataFrame to Excel bytes."""
     output = BytesIO()
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-        return output.getvalue()
-    except Exception as e:
-        logger.error(f"Error converting to Excel: {e}")
-        st.error("Failed to generate Excel file")
-        return None
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Template')
+    return output.getvalue()
 
 def validate_data(data):
-    """Validate input data for elasticity calculation."""
     if data is None or len(data) == 0:
-        raise ValueError("Data is empty")
-    
+        raise ValueError("Dataset is empty.")
     if 'Price' not in data.columns or 'Quantity' not in data.columns:
-        raise ValueError("Data must contain 'Price' and 'Quantity' columns")
-    
-    # Check for negative or zero values
-    if (data['Price'] <= 0).any() or (data['Quantity'] <= 0).any():
-        logger.warning("Data contains zero or negative values - they will be filtered out")
-    
-    return True
+        raise ValueError("Dataset must contain 'Price' and 'Quantity' columns.")
 
 def calculate_elasticity(data):
-    """Calculate price elasticity using Log-Log Regression with error handling."""
-    try:
-        # Validate input
-        validate_data(data)
-        
-        # Filter out zeros and negatives for log transformation
-        clean_data = data[(data['Price'] > 0) & (data['Quantity'] > 0)].copy()
-        
-        # Check if we have enough data points
-        if len(clean_data) < 2:
-            raise ValueError(f"Not enough valid data points. Need at least 2, got {len(clean_data)}")
-        
-        # Log transformation
-        X = np.log(clean_data['Price'])
-        y = np.log(clean_data['Quantity'])
-        X = sm.add_constant(X)
-        
-        # Fit OLS model
-        model = sm.OLS(y, X).fit()
-        beta = model.params[1]  # Elasticity coefficient
-        r_sq = model.rsquared
-        
-        logger.info(f"Elasticity calculated: {beta:.4f}, R-squared: {r_sq:.4f}")
-        return beta, r_sq, model
-        
-    except Exception as e:
-        logger.error(f"Error calculating elasticity: {e}")
-        raise
+    validate_data(data)
 
-# --- Sidebar: Data Management ---
-st.sidebar.header("1. Data Management")
-uploaded_file = st.sidebar.file_uploader("Upload Sales Data (CSV or Excel)", type=["csv", "xlsx"])
+    clean_data = data[(data['Price'] > 0) & (data['Quantity'] > 0)].copy()
+    if len(clean_data) < 2:
+        raise ValueError("Need at least 2 valid positive observations.")
+
+    X = np.log(clean_data['Price'])
+    y = np.log(clean_data['Quantity'])
+    X = sm.add_constant(X)
+
+    model = sm.OLS(y, X).fit()
+
+    beta = model.params.iloc[1]
+    r_sq = model.rsquared
+    p_value = model.pvalues.iloc[1]
+    conf_int = model.conf_int().iloc[1]
+
+    return beta, r_sq, model, p_value, conf_int
+
+# -----------------------------
+# Sidebar
+# -----------------------------
+st.sidebar.header("1️⃣ Data Management")
+uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
 
 st.sidebar.divider()
-st.sidebar.write("💡 **Need a template?**")
-sample_template = get_sample_data()
+st.sidebar.write("Need a template?")
+st.sidebar.download_button(
+    label="📥 Download Sample Template",
+    data=to_excel(get_sample_data()),
+    file_name="pricing_template.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
-excel_data = to_excel(sample_template)
-if excel_data:
-    st.sidebar.download_button(
-        label="📥 Download Excel Template",
-        data=excel_data,
-        file_name='pricing_template.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+# -----------------------------
+# Load Data
+# -----------------------------
+if uploaded_file:
+    try:
+        df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
+        st.success(f"Data loaded successfully! Rows: {len(df)}")
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
+        df = get_sample_data()
+else:
+    st.info("Using sample dataset. Upload your own data in sidebar.")
+    df = get_sample_data()
+
+# -----------------------------
+# Main Analysis
+# -----------------------------
+try:
+    beta, r_sq, model, p_value, conf_int = calculate_elasticity(df)
+
+    st.divider()
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Elasticity (β)", f"{beta:.4f}")
+    col2.metric("R-Squared", f"{r_sq:.2%}")
+    col3.metric("p-value", f"{p_value:.4f}")
+    col4.metric("Market Type", "Elastic" if abs(beta) > 1 else "Inelastic")
+
+    st.caption(f"95% Confidence Interval: [{conf_int[0]:.3f}, {conf_int[1]:.3f}]")
+
+    # -----------------------------
+    # Strategic Recommendation
+    # -----------------------------
+    st.subheader("📋 Strategic Recommendation")
+
+    if beta > -1:
+        st.success(
+            f"""
+**Inelastic Market**
+
+• 1% price increase → {abs(beta):.2f}% drop in volume  
+• Customers are not very price sensitive  
+• Consider controlled price increases to boost margins
+"""
+        )
+    elif -2.5 <= beta <= -1:
+        st.warning(
+            f"""
+**Elastic Market**
+
+• 1% price increase → {abs(beta):.2f}% drop in volume  
+• Customers are price sensitive  
+• Promotional pricing may increase total revenue
+"""
+        )
+    else:
+        st.error(
+            f"""
+**Hyper-Elastic Market**
+
+• 1% price increase → {abs(beta):.2f}% drop in volume  
+• Commodity-like behavior  
+• Focus on cost leadership & efficiency
+"""
+        )
+
+    # -----------------------------
+    # Simulation
+    # -----------------------------
+    st.divider()
+    st.header("🕹️ What-If Simulation")
+
+    col_sim1, col_sim2 = st.columns([1, 2])
+
+    avg_q = df['Quantity'].mean()
+
+    with col_sim1:
+        current_price = st.number_input("Current Avg Price ($)", value=float(df['Price'].mean()), min_value=0.01)
+        unit_cost = st.number_input("Unit Cost ($)", value=float(df['Price'].min() * 0.5), min_value=0.0)
+
+        optimal_p = None
+        if beta < -1:
+            optimal_p = (unit_cost * beta) / (1 + beta)
+            if optimal_p > 0 and np.isfinite(optimal_p):
+                st.success(f"💡 Profit-Maximizing Price: ${optimal_p:.2f}")
+
+        price_change = st.slider("Adjust Price (%)", -50, 100, 0, step=5)
+        new_price = current_price * (1 + price_change / 100)
+
+        predicted_q = avg_q * (new_price / current_price) ** beta
+        new_revenue = new_price * predicted_q
+        new_profit = (new_price - unit_cost) * predicted_q
+
+        old_revenue = current_price * avg_q
+        old_profit = (current_price - unit_cost) * avg_q
+
+        st.write("### Predictions")
+        st.write(f"Revenue: ${new_revenue:,.2f}")
+        st.write(f"Profit: ${new_profit:,.2f}")
+        st.write(f"Revenue Change: {((new_revenue-old_revenue)/old_revenue)*100:+.1f}%")
+        if old_profit != 0:
+            st.write(f"Profit Change: {((new_profit-old_profit)/old_profit)*100:+.1f}%")
+
+    with col_sim2:
+        prices = np.linspace(max(df['Price'].min()*0.5, 0.01), df['Price'].max()*1.5, 60)
+        quantities = avg_q * (prices / current_price) ** beta
+        revenues = prices * quantities
+        profits = (prices - unit_cost) * quantities
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=prices, y=revenues, name="Revenue"))
+        fig.add_trace(go.Scatter(x=prices, y=profits, name="Profit"))
+        fig.add_vline(x=new_price, line_dash="dash", line_color="red", annotation_text="Your Price")
+
+        if optimal_p and optimal_p > 0:
+            fig.add_vline(x=optimal_p, line_dash="dot", line_color="green", annotation_text="Optimal Price")
+
+        fig.update_layout(title="Revenue vs Profit Optimization", xaxis_title="Price ($)")
+        st.plotly_chart(fig, use_container_width=True)
+
+    # -----------------------------
+    # Demand Curve
+    # -----------------------------
+    st.divider()
+    st.subheader("📊 Demand Curve")
+
+    fig_scatter = px.scatter(
+        df,
+        x="Price",
+        y="Quantity",
+        trendline="ols",
+        title="Historical Price vs Quantity"
     )
 
-# --- Data Selection Logic ---
-df = None
+    st.plotly_chart(fig_scatter, use_container_width=True)
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        logger.info(f"File uploaded successfully: {uploaded_file.name}")
-        st.success(f"✅ Data loaded successfully! Rows: {len(df)}")
-    except Exception as e:
-        st.error(f"❌ Error loading file: {e}")
-        logger.error(f"File upload error: {e}")
-else:
-    st.info("👋 **Welcome!** You can upload a file in the sidebar or use our sample data to explore.")
-    if st.button("📊 Load Sample Data & Run Analysis"):
-        df = get_sample_data()
-        st.session_state['using_sample'] = True
-    else:
-        df = get_sample_data()  # Default fallback
+    # -----------------------------
+    # Model Summary
+    # -----------------------------
+    with st.expander("📋 Full Regression Summary"):
+        st.write(model.summary())
 
-# --- Main Analysis Section ---
-if df is not None:
-    try:
-        # Calculate elasticity
-        beta, r_sq, model = calculate_elasticity(df)
-        
-        # --- Display Key Metrics ---
-        st.divider()
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Price Elasticity (β)", f"{beta:.4f}", 
-                     help="% change in quantity for 1% change in price")
-        with col2:
-            st.metric("R-Squared (Model Fit)", f"{r_sq:.2%}", 
-                     help="Proportion of variance explained")
-        with col3:
-            status = "📈 Elastic" if abs(beta) > 1 else "📉 Inelastic"
-            st.metric("Market Type", status,
-                     help="Elastic: Q changes more than P; Inelastic: Q changes less than P")
-            # --- Strategy Logic (Indented correctly inside the 'if df is not None' block) ---
-        st.subheader("Strategic Recommendation")
-        
-        # Combined Interpretation and Strategy
-        if beta > -1.0:
-            st.success("💰 **Strategy: Margin Optimization**")
-            st.write(f"**Interpretation:** A 1% increase in price leads to only a **{abs(beta):.2f}%** drop in volume.")
-            st.write("Demand is **Inelastic**. Customers aren't very price-sensitive. You have 'Pricing Power.' Consider small price increases to significantly boost your total profit.")
-        elif -2.5 <= beta <= -1.0:
-            st.warning("📊 **Strategy: Market Share & Volume**")
-            st.write(f"**Interpretation:** A 1% increase in price leads to a **{abs(beta):.2f}%** drop in volume.")
-            st.write("Demand is **Elastic**. Customers are sensitive. Focus on promotional pricing. A price cut could lead to a 'Sales Surge' that outweighs the lower margin.")
-        else:
-            st.error("📉 **Strategy: Cost Leadership**")
-            st.write(f"**Interpretation:** A 1% increase in price leads to a massive **{abs(beta):.2f}%** drop in volume.")
-            st.write("Demand is **Hyper-Elastic**. You are in a commodity market. Focus on operational efficiency and lowering your **Unit Cost** to stay competitive.")
+    with st.expander("📈 Raw Data"):
+        st.dataframe(df, use_container_width=True)
 
-        # --- Simulator Section ---
-        st.divider()
-        st.header("🕹️ What-If Simulation")
-        # ... rest of the code (col_sim1, etc)
-        
-        # --- Elasticity Interpretation ---
-        st.info(f"""
-        **Interpretation:** A 1% increase in price leads to a **{beta:.2f}%** change in quantity demanded.
-        """)
-        
-        col_sim1, col_sim2 = st.columns([1, 2])
-        
-        with col_sim1:
-            st.subheader("Control Parameters")
-            current_price = st.number_input(
-                "Current Avg Price ($)", 
-                value=float(df['Price'].mean()),
-                min_value=0.01,
-                step=1.0
-            )
-            unit_cost = st.number_input(
-                "Unit Cost ($)", 
-                value=float(df['Price'].min() * 0.5),
-                min_value=0.0,
-                step=0.5
-            )
-            if beta < -1:
-                optimal_p = (unit_cost * beta) / (1 + beta)
-                if optimal_p > 0:
-                    st.success(f"💡 **Profit-Maximizing Price:** ${optimal_p:.2f}")
-                else:
-                    st.warning("⚠️ Unit cost is too high for the current elasticity model.")
-            else:
-                st.info("ℹ️ Market is Inelastic: Mathematical profit-max price is undefined.")
-
-            price_change = st.slider("Adjust Price (%)", -50, 100, 0, step=5)
-            
-            # Calculations
-            new_price = current_price * (1 + price_change / 100)
-            avg_q = df['Quantity'].mean()
-            
-            # Safe calculation with zero division check
-            if current_price > 0:
-                predicted_q = avg_q * (new_price / current_price) ** beta
-            else:
-                predicted_q = 0
-            
-            new_revenue = new_price * predicted_q
-            new_profit = (new_price - unit_cost) * predicted_q
-            
-            # Display results with formatting
-            st.write("### Predictions")
-            st.write(f"**New Price:** ${new_price:.2f}")
-            st.write(f"**Predicted Quantity:** {predicted_q:.1f} units")
-            st.write(f"**Predicted Revenue:** ${new_revenue:,.2f}")
-            st.write(f"**Predicted Profit:** ${new_profit:,.2f}")
-            
-            # Calculate % changes
-            old_revenue = current_price * avg_q
-            old_profit = (current_price - unit_cost) * avg_q
-            revenue_change = ((new_revenue - old_revenue) / old_revenue * 100) if old_revenue > 0 else 0
-            profit_change = ((new_profit - old_profit) / old_profit * 100) if old_profit > 0 else 0
-            
-            st.write("### Changes")
-            st.write(f"Revenue Change: {revenue_change:+.1f}%")
-            st.write(f"Profit Change: {profit_change:+.1f}%")
-        
-        with col_sim2:
-            # Optimization Chart
-            prices = np.linspace(max(df['Price'].min() * 0.5, 0.01), df['Price'].max() * 1.5, 50)
-            quantities = avg_q * (prices / current_price) ** beta if current_price > 0 else avg_q * np.ones_like(prices)
-            revenues = prices * quantities
-            profits = (prices - unit_cost) * quantities
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=prices, y=revenues, 
-                name="Revenue", 
-                line=dict(color='blue', width=3),
-                hovertemplate='Price: $%{x:.2f}<br>Revenue: $%{y:,.0f}<extra></extra>'
-            ))
-            fig.add_trace(go.Scatter(
-                x=prices, y=profits, 
-                name="Profit", 
-                line=dict(color='green', width=3),
-                hovertemplate='Price: $%{x:.2f}<br>Profit: $%{y:,.0f}<extra></extra>'
-            ))
-            fig.add_vline(x=new_price, line_dash="dash", line_color="red", 
-                         annotation_text="Your Price", annotation_position="top right")
-            
-            fig.update_layout(
-                title="Revenue vs Profit Optimization",
-                xaxis_title="Price ($)",
-                yaxis_title="Total Value ($)",
-                hovermode='x unified',
-                height=500
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # --- Demand Curve ---
-        st.divider()
-        st.subheader("📊 Demand Curve & Historical Data")
-        
-        fig_scatter = px.scatter(
-            df, x="Price", y="Quantity", 
-            trendline="ols",
-            title="Historical Demand Relationship (Log-Log Fit)",
-            labels={"Price": "Price ($)", "Quantity": "Quantity (units)"},
-            hover_data={"Price": ":.2f", "Quantity": ":.0f"}
-        )
-        fig_scatter.update_traces(marker=dict(size=10))
-        st.plotly_chart(fig_scatter, use_container_width=True)
-        
-        # --- Model Summary ---
-        with st.expander("📋 Detailed Model Summary"):
-            st.write(model.summary())
-        
-        # --- Data Table ---
-        with st.expander("📈 View Raw Data"):
-            st.dataframe(df, use_container_width=True)
-    
-    except ValueError as e:
-        st.error(f"❌ Data Validation Error: {e}")
-        logger.error(f"Validation error: {e}")
-    except Exception as e:
-        st.error(f"❌ An unexpected error occurred: {e}")
-        logger.error(f"Unexpected error: {e}")
+except Exception as e:
+    st.error(f"Error in analysis: {e}")
+    logger.error(e)
