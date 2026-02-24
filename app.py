@@ -166,10 +166,6 @@ if df is not None:
         **Interpretation:** A 1% increase in price leads to a **{beta:.2f}%** change in quantity demanded.
         """)
         
-        # --- Simulator Section ---
-        st.divider()
-        st.header("🕹️ What-If Simulation")
-        
         col_sim1, col_sim2 = st.columns([1, 2])
         
         with col_sim1:
