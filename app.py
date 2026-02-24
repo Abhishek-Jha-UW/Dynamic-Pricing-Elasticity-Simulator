@@ -78,10 +78,6 @@ else:
     st.info("👋 Using sample data. Upload your own in the sidebar to begin.")
     df = get_sample_data()
 
-# --- Data Preview (The Section You Wanted Back) ---
-with st.expander("👀 Preview Raw Data", expanded=False):
-    st.dataframe(df, use_container_width=True)
-
 # --- Main Analysis ---
 if df is not None:
     try:
@@ -95,22 +91,22 @@ if df is not None:
         status = "📈 Elastic" if abs(beta) > 1 else "📉 Inelastic"
         m3.metric("Market Type", status)
 
-        # 2. Strategic Recommendations (The 2-Point Section)
+        # 2. Strategic Recommendations (Revised Section)
         st.subheader("📋 Strategic Recommendations")
         
         if beta > -1.0:
-            market_type, st_box = "Inelastic", st.success
-            advice = "Customers aren't very price-sensitive. You have 'Pricing Power.' Consider small price increases."
+            market_type, box_type = "Inelastic", st.success
+            insight_advice = "Customers aren't very price-sensitive. You have 'Pricing Power.' Consider small price increases to significantly boost total profit."
         elif -2.5 <= beta <= -1.0:
-            market_type, st_box = "Elastic", st.warning
-            advice = "Customers are sensitive. Focus on promotional pricing. A price cut could lead to a 'Sales Surge' that outweighs the lower margin."
+            market_type, box_type = "Elastic", st.warning
+            insight_advice = "Customers are sensitive. Focus on promotional pricing. A price cut could lead to a 'Sales Surge' that outweighs the lower margin."
         else:
-            market_type, st_box = "Hyper-Elastic", st.error
-            advice = "You are in a commodity market. Focus on operational efficiency and lowering Unit Cost."
+            market_type, box_type = "Hyper-Elastic", st.error
+            insight_advice = "You are in a commodity market. Focus on operational efficiency and lowering your Unit Cost to stay competitive."
 
-        st_box(f"""
-        1. **Price Impact:** A 1% price increase is leading to a **{abs(beta):.2f}%** change in sales volume.
-        2. **Market Insight:** Demand is **{market_type}**. {advice}
+        box_type(f"""
+        1. **Price Impact:** A 1% price increase for your product is leading to a **{abs(beta):.2f}%** change in sales volume/demand.
+        2. **Market Insight:** Demand is **{market_type}**. {insight_advice}
         """)
 
         # 3. What-If Simulation
@@ -150,21 +146,16 @@ if df is not None:
             fig.update_layout(title="Revenue vs Profit Optimization", xaxis_title="Price ($)", height=450)
             st.plotly_chart(fig, use_container_width=True)
 
-        # 4. Technical Regression Output (The Section You Wanted Back)
+        # 4. Detailed Validation & Raw Data (Expanders)
         st.divider()
-        st.subheader("🔬 Model Validation")
-        col_chart, col_stats = st.columns([3, 2])
-        
-        with col_chart:
-            fig_scatter = px.scatter(df, x="Price", y="Quantity", trendline="ols", 
-                                     title="Historical Demand Relationship (Log-Log Fit)")
+        with st.expander("📊 View Demand Curve & Model Statistics"):
+            fig_scatter = px.scatter(df, x="Price", y="Quantity", trendline="ols", title="Log-Log Regression Fit")
             st.plotly_chart(fig_scatter, use_container_width=True)
+            st.text("Detailed OLS Regression Summary")
+            st.write(model.summary())
             
-        with col_stats:
-            st.write("**Regression Statistics (OLS Output)**")
-            st.text(model.summary().tables[1]) # Display the coefficients table directly
-            with st.expander("View Full OLS Summary"):
-                st.write(model.summary())
+        with st.expander("📈 View Raw Data Table"):
+            st.dataframe(df, use_container_width=True)
 
     except Exception as e:
         st.error(f"Error in analysis: {e}")
