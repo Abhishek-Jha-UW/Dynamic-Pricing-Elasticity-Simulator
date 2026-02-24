@@ -139,6 +139,27 @@ if df is not None:
             status = "📈 Elastic" if abs(beta) > 1 else "📉 Inelastic"
             st.metric("Market Type", status,
                      help="Elastic: Q changes more than P; Inelastic: Q changes less than P")
+            # --- Strategy Logic (Indented correctly inside the 'if df is not None' block) ---
+        st.subheader("🎯 Strategic Playbook")
+        
+        # Combined Interpretation and Strategy
+        if beta > -1.0:
+            st.success("💰 **Strategy: Margin Optimization**")
+            st.write(f"**Interpretation:** A 1% increase in price leads to only a **{abs(beta):.2f}%** drop in volume.")
+            st.write("Demand is **Inelastic**. Customers aren't very price-sensitive. You have 'Pricing Power.' Consider small price increases to significantly boost your total profit.")
+        elif -2.5 <= beta <= -1.0:
+            st.warning("📊 **Strategy: Market Share & Volume**")
+            st.write(f"**Interpretation:** A 1% increase in price leads to a **{abs(beta):.2f}%** drop in volume.")
+            st.write("Demand is **Elastic**. Customers are sensitive. Focus on promotional pricing. A price cut could lead to a 'Sales Surge' that outweighs the lower margin.")
+        else:
+            st.error("📉 **Strategy: Cost Leadership**")
+            st.write(f"**Interpretation:** A 1% increase in price leads to a massive **{abs(beta):.2f}%** drop in volume.")
+            st.write("Demand is **Hyper-Elastic**. You are in a commodity market. Focus on operational efficiency and lowering your **Unit Cost** to stay competitive.")
+
+        # --- Simulator Section ---
+        st.divider()
+        st.header("🕹️ What-If Simulation")
+        # ... rest of the code (col_sim1, etc)
         
         # --- Elasticity Interpretation ---
         st.info(f"""
@@ -165,6 +186,15 @@ if df is not None:
                 min_value=0.0,
                 step=0.5
             )
+            if beta < -1:
+                optimal_p = (unit_cost * beta) / (1 + beta)
+                if optimal_p > 0:
+                    st.success(f"💡 **Profit-Maximizing Price:** ${optimal_p:.2f}")
+                else:
+                    st.warning("⚠️ Unit cost is too high for the current elasticity model.")
+            else:
+                st.info("ℹ️ Market is Inelastic: Mathematical profit-max price is undefined.")
+
             price_change = st.slider("Adjust Price (%)", -50, 100, 0, step=5)
             
             # Calculations
