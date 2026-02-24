@@ -140,7 +140,7 @@ if df is not None:
             st.metric("Market Type", status,
                      help="Elastic: Q changes more than P; Inelastic: Q changes less than P")
             # --- Strategy Logic (Indented correctly inside the 'if df is not None' block) ---
-        st.subheader("🎯 Strategic Playbook")
+        st.subheader("Strategic Recommendation")
         
         # Combined Interpretation and Strategy
         if beta > -1.0:
