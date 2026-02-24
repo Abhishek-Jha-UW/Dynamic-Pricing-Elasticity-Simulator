@@ -7,9 +7,6 @@ An interactive web application to calculate **Price Elasticity of Demand**. This
 ### 1. What is Price Elasticity?
 Price Elasticity of Demand (PED) measures how the quantity demanded of a good responds to a change in its price.
 
-**Formula:**
-$$PED = \frac{\% \text{ Change in Quantity Demanded}}{\% \text{ Change in Price}}$$
-
 ---
 
 ### 2. Log–Log Model (Constant Elasticity)
