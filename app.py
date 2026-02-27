@@ -12,23 +12,41 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Page Config ---
-st.set_page_config(page_title="Price Elasticity Simulator", layout="wide")
+st.set_page_config(page_title="Price Elasticity Simulator", layout="wide", page_icon="📈")
+
+# --- Custom Styling for a Professional Look ---
+st.markdown("""
+<style>
+    .stMetric {background-color: #f0f2f6; padding: 15px; border-radius: 10px; border: 1px solid #e6e9ef;}
+    div.stButton > button:first-child {background-color: #0083B8; color: white;}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📈 Dynamic Pricing & Elasticity Simulator")
-st.markdown("Optimize your revenue and profit using Log-Log Regression models.")
+st.markdown("Optimize your revenue and profit using **Log-Log Regression** models to understand demand sensitivity.")
+st.divider()
 
 # --- Helper Functions ---
 @st.cache_data
 def get_sample_data():
+    """Generates realistic sample data following a power law with noise."""
+    np.random.seed(42)
+    # Simulate 20 price points
+    prices = np.linspace(10, 50, 20)
+    # True elasticity: -1.5 (Elastic), with random noise added
+    noise = np.random.uniform(0.9, 1.1, 20)
+    quantity = 1000 * (prices ** -1.5) * noise
+    
     return pd.DataFrame({
-        'Price': [10, 12, 15, 18, 20, 22, 25, 30, 35, 40],
-        'Quantity': [500, 450, 380, 310, 290, 240, 200, 150, 100, 80]
+        'Price': np.round(prices, 2),
+        'Quantity': np.round(quantity)
     })
 
 def to_excel(df):
     output = BytesIO()
     try:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            df.to_excel(writer, index=False, sheet_name='SalesData')
         return output.getvalue()
     except Exception as e:
         logger.error(f"Error converting to Excel: {e}")
@@ -45,17 +63,19 @@ def validate_data(data):
 def calculate_elasticity(data):
     validate_data(data)
 
+    # Filter for positive values for log transformation
     clean_data = data[(data['Price'] > 0) & (data['Quantity'] > 0)].copy()
 
-    if len(clean_data) < 2:
-        raise ValueError("Not enough valid data points. Need at least 2.")
+    if len(clean_data) < 3:
+        raise ValueError("Not enough valid data points. Need at least 3 for reliable regression.")
 
+    # Log-Log Regression for Constant Elasticity
     X = np.log(clean_data['Price'])
     y = np.log(clean_data['Quantity'])
     X = sm.add_constant(X)
 
     model = sm.OLS(y, X).fit()
-    beta = model.params.iloc[1]
+    beta = model.params.iloc[1] # The elasticity coefficient
     r_sq = model.rsquared
 
     return beta, r_sq, model
@@ -90,7 +110,7 @@ if uploaded_file is not None:
         st.error(f"❌ Error loading file: {e}")
         df = get_sample_data()
 else:
-    st.info("👋 Using sample data. Upload your own in the sidebar to begin.")
+    st.info("👋 **Using sample data.** Upload your own in the sidebar to begin analysis.")
     df = get_sample_data()
 
 # --- Main Analysis ---
@@ -99,70 +119,56 @@ if df is not None:
         beta, r_sq, model = calculate_elasticity(df)
 
         # --- Metrics ---
-        st.divider()
-        col1, col2, col3 = st.columns(3)
+        st.subheader("📊 Key Metrics")
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             st.metric("Price Elasticity (β)", f"{beta:.4f}",
-                      help="% change in quantity for 1% change in price")
+                      help="% change in quantity for 1% change in price. If β=-1.5, a 1% price increase drops volume by 1.5%.")
 
         with col2:
-            st.metric("R-Squared (Model Fit)", f"{r_sq:.2%}",
-                      help="Proportion of variance explained")
+            st.metric("Model Fit (R-Squared)", f"{r_sq:.2%}",
+                      help="Proportion of variance explained by the price-demand relationship.")
 
         with col3:
-            status = "📈 Elastic" if abs(beta) > 1 else "📉 Inelastic"
+            status = "Elastic" if abs(beta) > 1 else "Inelastic"
             st.metric("Market Type", status)
+            
+        with col4:
+            st.metric("Avg Price", f"${df['Price'].mean():.2f}")
 
         # --- Strategic Recommendation ---
-        st.subheader("Strategic Recommendation")
+        st.divider()
+        st.subheader("💡 Strategic Recommendation")
 
         if beta > -1.0:
-            st.success("💰 Inelastic Market")
+            st.success("💰 **Inelastic Market** (Customers are not very price sensitive)")
             st.markdown(f"""
-**1️⃣ Price Impact**  
-A 1% increase in price leads to only a **{abs(beta):.2f}%** drop in volume.
-
-**2️⃣ Market Behavior**  
-Demand is **Inelastic**. Customers are relatively insensitive to price changes.
-
-**3️⃣ Strategic Action**  
-Consider controlled price increases to improve margins without significant volume loss.
-""")
+            * **Price Impact:** A 1% increase in price leads to only a **{abs(beta):.2f}%** drop in volume.
+            * **Action:** Consider controlled price increases to improve margins without significant volume loss.
+            """)
 
         elif -2.5 <= beta <= -1.0:
-            st.warning("📊 Elastic Market")
+            st.warning("📊 **Elastic Market** (Customers are price sensitive)")
             st.markdown(f"""
-**1️⃣ Price Impact**  
-A 1% increase in price leads to a **{abs(beta):.2f}%** drop in volume.
-
-**2️⃣ Market Behavior**  
-Demand is **Elastic**. Customers are price sensitive.
-
-**3️⃣ Strategic Action**  
-Use promotional pricing carefully. A price reduction may increase total revenue through higher volume.
-""")
+            * **Price Impact:** A 1% increase in price leads to a **{abs(beta):.2f}%** drop in volume.
+            * **Action:** Use promotional pricing carefully. A small price reduction may increase total revenue through higher volume.
+            """)
 
         else:
-            st.error("📉 Hyper-Elastic Market")
+            st.error("📉 **Hyper-Elastic Market** (Commodity-like dynamics)")
             st.markdown(f"""
-**1️⃣ Price Impact**  
-A 1% increase in price leads to a significant **{abs(beta):.2f}%** drop in volume.
-
-**2️⃣ Market Behavior**  
-Demand is **Highly Elastic**, indicating commodity-like dynamics.
-
-**3️⃣ Strategic Action**  
-Focus on operational efficiency and lowering unit costs to remain competitive.
-""")
+            * **Price Impact:** A 1% increase in price leads to a significant **{abs(beta):.2f}%** drop in volume.
+            * **Action:** Focus on operational efficiency and lowering unit costs to remain competitive.
+            """)
 
         # --- Simulation ---
         st.divider()
         st.header("🕹️ What-If Simulation")
+        st.markdown("Adjust parameters to forecast revenue and profit.")
 
         col_sim1, col_sim2 = st.columns([1, 2])
-        avg_q = df['Quantity'].mean()
-
+        
         with col_sim1:
             current_price = st.number_input(
                 "Current Avg Price ($)",
@@ -172,81 +178,79 @@ Focus on operational efficiency and lowering unit costs to remain competitive.
 
             unit_cost = st.number_input(
                 "Unit Cost ($)",
-                value=float(df['Price'].min() * 0.5),
+                value=float(df['Price'].min() * 0.7),
                 min_value=0.0
             )
 
+            # Profit Maximizing Price formula for Constant Elasticity
             if beta < -1:
                 optimal_p = (unit_cost * beta) / (1 + beta)
                 if optimal_p > 0:
-                    st.success(f"💡 Profit-Maximizing Price: ${optimal_p:.2f}")
+                    st.success(f"🎯 Profit-Maximizing Price: **${optimal_p:.2f}**")
 
             price_change = st.slider("Adjust Price (%)", -50, 100, 0, step=5)
 
             new_price = current_price * (1 + price_change / 100)
-            predicted_q = avg_q * (new_price / current_price) ** beta
+            # Q2 = Q1 * (P2/P1)^beta
+            predicted_q = df['Quantity'].mean() * (new_price / current_price) ** beta
+            
             new_revenue = new_price * predicted_q
             new_profit = (new_price - unit_cost) * predicted_q
 
-            old_revenue = current_price * avg_q
-            old_profit = (current_price - unit_cost) * avg_q
+            old_revenue = current_price * df['Quantity'].mean()
+            old_profit = (current_price - unit_cost) * df['Quantity'].mean()
 
-            st.write("### Predictions")
-            st.write(f"Revenue: ${new_revenue:,.2f}")
-            st.write(f"Profit: ${new_profit:,.2f}")
-
-            st.write("### Changes")
-            st.write(f"Revenue Change: {((new_revenue-old_revenue)/old_revenue)*100:+.1f}%")
-
-            if old_profit != 0:
-                st.write(f"Profit Change: {((new_profit-old_profit)/old_profit)*100:+.1f}%")
+            st.write("### 📊 Projections")
+            st.metric("Predicted Revenue", f"${new_revenue:,.2f}", f"{((new_revenue-old_revenue)/old_revenue)*100:+.1f}% vs Current")
+            st.metric("Predicted Profit", f"${new_profit:,.2f}", f"{((new_profit-old_profit)/old_profit)*100:+.1f}% vs Current")
 
         with col_sim2:
+            # Generate range for curve
             prices = np.linspace(max(df['Price'].min()*0.5, 0.01),
-                                 df['Price'].max()*1.5, 50)
+                                 df['Price'].max()*1.5, 100)
 
-            quantities = avg_q * (prices / current_price) ** beta
+            quantities = df['Quantity'].mean() * (prices / current_price) ** beta
             revenues = prices * quantities
             profits = (prices - unit_cost) * quantities
 
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=prices, y=revenues, name="Revenue"))
-            fig.add_trace(go.Scatter(x=prices, y=profits, name="Profit"))
+            fig.add_trace(go.Scatter(x=prices, y=revenues, name="Revenue", line=dict(color='#0083B8')))
+            fig.add_trace(go.Scatter(x=prices, y=profits, name="Profit", line=dict(color='#28a745', dash='dash')))
             fig.add_vline(x=new_price, line_dash="dash",
-                          line_color="red", annotation_text="Your Price")
+                          line_color="red", annotation_text="Simulated Price")
 
             fig.update_layout(
-                title="Revenue vs Profit Optimization",
+                title="Revenue vs Profit Optimization Curve",
                 xaxis_title="Price ($)",
-                yaxis_title="Total Value ($)",
+                yaxis_title="USD ($)",
                 hovermode='x unified',
-                height=500
+                height=500,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
 
             st.plotly_chart(fig, use_container_width=True)
 
-        # --- Combined Model Diagnostics Dropdown ---
+        # --- Model Diagnostics & Data ---
         st.divider()
-        with st.expander("📊 Model Diagnostics & Historical Demand Analysis"):
+        with st.expander("📊 View Model Diagnostics & Data"):
 
-            st.subheader("Demand Curve & Historical Data")
-
+            st.subheader("Historical Demand Plot")
+            # Plot raw data with the fitted regression line
             fig_scatter = px.scatter(
                 df,
                 x="Price",
                 y="Quantity",
-                trendline="ols",
-                title="Historical Demand Relationship (Log-Log Fit)",
-                labels={"Price": "Price ($)", "Quantity": "Quantity (units)"}
+                title="Historical Sales Data",
+                labels={"Price": "Price ($)", "Quantity": "Units Sold"}
             )
-
+            # Add the modeled curve
+            fig_scatter.add_trace(go.Scatter(x=prices, y=quantities, name="Log-Log Fit", line=dict(color='red')))
             st.plotly_chart(fig_scatter, use_container_width=True)
 
             st.subheader("Detailed Regression Summary")
             st.write(model.summary())
-
-        # --- Raw Data ---
-        with st.expander("📈 View Raw Data"):
+            
+            st.subheader("Raw Data")
             st.dataframe(df, use_container_width=True)
 
     except Exception as e:
